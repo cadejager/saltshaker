@@ -39,29 +39,21 @@ def read_csv(filename):
 def write_csv(filename, schedule):
     with open(filename, 'w', newline='') as file:
         writer = csv.writer(file)
-        writer.writerow(['Night', 'Host', 'Attendees'])
+        writer.writerow(['Night', 'Size', 'Space', 'Host', 'Attendees'])
         for night, hosts in enumerate(schedule):
             for host, attendees in hosts.items():
                 attendees_email = []
                 for a in attendees:
                     attendees_email.append(a.email)
-                writer.writerow([night, host.email, ', '.join(attendees_email)])
+                writer.writerow([
+                        night,
+                        sum(g.size for g in attendees),
+                        host.space,
+                        host.email,
+                        ', '.join(attendees_email)
+                        ])
 
-def cost(schedule):
-    host_counts = {}  # Number of times each family hosts
-    unique_meets = {}  # Number of unique families each family meets
-    for night, hosts in enumerate(schedule):
-        for host, attendees in hosts.items():
-            host_counts[host] = host_counts.get(host, 0) + 1
-            unique_meets[host] = len(set(attendees))
-    max_hosts = max(host_counts.values())
-    cost = 0
-    for family in host_counts:
-        cost += 0.7 * host_counts[family]
-        cost += 0.3 / unique_meets[family]
-    cost += 1000 * max_hosts  # Add a large penalty based on the maximum number of times any family hosts
-    return cost
-
+# writes a summery of the score of the finding
 def summery(schedule):
     host_counts = {}
 
@@ -89,7 +81,7 @@ def summery(schedule):
     print("host_counts: " + str(host_counts))
     print("meets_count: " + str(meets_count))
 
-
+# Calculates a score for the result
 def score(schedule):
 
     host_counts = {}
@@ -191,7 +183,7 @@ def find_schedule(families):
     #           in 10k runs or something
     j = 0
     k = 0
-    while 100000 > j:
+    while 50000 > j:
         j += 1
         k += 1
 
