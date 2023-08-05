@@ -42,7 +42,10 @@ def write_csv(filename, schedule):
         writer.writerow(['Night', 'Host', 'Attendees'])
         for night, hosts in enumerate(schedule):
             for host, attendees in hosts.items():
-                writer.writerow([night, host, ', '.join(attendees)])
+                attendees_email = []
+                for a in attendees:
+                    attendees_email.append(a.email)
+                writer.writerow([night, host.email, ', '.join(attendees_email)])
 
 def cost(schedule):
     host_counts = {}  # Number of times each family hosts
@@ -59,69 +62,148 @@ def cost(schedule):
     cost += 1000 * max_hosts  # Add a large penalty based on the maximum number of times any family hosts
     return cost
 
+def summery(schedule):
+    host_counts = {}
+
+    meets = {}
+    meals = 0
+
+    for night,hosts in enumerate(schedule):
+        for host, attendees in hosts.items():
+            host_counts[host] = host_counts.get(host, 0) + 1
+            for family in attendees:
+                meals += 1
+                if family not in meets:
+                    meets[family] = set()
+                for a in attendees:
+                    meets[family].add(a)
+
+    max_hosts = max(host_counts.values())
+
+    meets_count = 0
+    for family in meets:
+        meets_count += len(meets[family])
+
+    print("meals: " + str(meals))
+    print("max_hosts: " + str(max_hosts))
+    print("host_counts: " + str(host_counts))
+    print("meets_count: " + str(meets_count))
+
+
+def score(schedule):
+
+    host_counts = {}
+
+    meets = {}
+    meals = 0
+
+    for night,hosts in enumerate(schedule):
+        for host, attendees in hosts.items():
+            host_counts[host] = host_counts.get(host, 0) + 1
+            for family in attendees:
+                meals += 1
+                if family not in meets:
+                    meets[family] = set()
+                #meets[family].add(attendees.values())
+                for a in attendees:
+                    meets[family].add(a)
+
+    # large score bonus for feeding everyone
+    score = 128 * meals
+    # medium negitive score for having someone host a bunch of times
+    score -= 16 * max(host_counts.values())
+    # small negitive score for each hosting
+    score -= 4 * sum(host_counts.values())
+    # small positive score for more meets
+    for family in meets:
+        score += len(meets[family])
+
+    return score
+
+# Generates a schedule from the list families. This function gurentees that the repel families
+# are not together and that guests are not assigned to a house with their alergies.
+# it does not gurentee that all guests are given a host so... make sure that is a priority in
+# the cost function
 def generate_schedule(families):
     nights = [{} for _ in range(len(families[0].attend_nights))]  # Initialize schedule
     for night in range(len(families[0].attend_nights)):
         assigned = set()  # Keep track of families that have been assigned to a dinner
-        unassigned = set()  # Keep track of families that haven't been assigned to a dinner
         random.shuffle(families)  # Shuffle the list of families
         for host in families:
+
             # check if host can host that night
-            if host.host_nights[night] and host.email not in assigned:
+            if host.host_nights[night] and host not in assigned:
+
                 # Try to find attendees for this host
                 for family in families:
                     
-                    if family.attend_nights[night] and family != host and family.email not in assigned:
-                        if host.email not in nights[night]:
-                            host_capacity = host.space - host.size  # Subtract host's own attendees from capacity
+                    if family.attend_nights[night] and family != host and family not in assigned:
+
+                        # Calculate remaning capacity of host
+                        if host not in nights[night]:
+                            # no entry just subract host's own size from space
+                            host_capacity = host.space - host.size
                         else:
-                            host_capacity = host.space - sum(g.size for g in families if g.email in nights[night][host.email])
+                            # see how much is already filled
+                            host_capacity = host.space - sum(g.size for g in nights[night][host])
+
                         # Check if adding this family would exceed the host's capacity
                         if host_capacity >= family.size:
-                            if host.email not in nights[night]:
-                                nights[night][host.email] = [host.email]  # Host attends its own dinner
-
+                            
                             # check if the host has an allergen the famly is allergic to
                             if set(host.allergens).intersection(family.allergies):
                                 break
 
-                            # check if the host is incompatable with any other members at the dinner
-                            repel = False
-                            for guest_email in nights[night][host.email]:
-                                guest = {}
-                                for g in families:
-                                    if guest_email == g.email:
-                                        guest = g
-                                        break
-                                
-                                if set(family.repel).intersection(guest.repel):
-                                    repel = True
-                            if repel:
+                            # check if host repels family
+                            if set(host.repel).intersection(family.repel):
                                 break
 
-                            nights[night][host.email].append(family.email)
-                            assigned.add(family.email)
-                            assigned.add(host.email)
+                            if host not in nights[night]:
+                                # create entry with host at dinner if it doesn't exist
+                                nights[night][host] = [host]
+                                # assign the host so they don't doin another dinner
+                                assigned.add(host)
+                            else:
+                                # check if the family is incompatable with any other members at the dinner
+                                repel = False
+                                for guest in nights[night][host]:
+                                    if set(family.repel).intersection(guest.repel):
+                                        repel = True
+                                        break
+                                if repel:
+                                    break
+
+                            # add the new family to the dinner and set them to assigned
+                            nights[night][host].append(family)
+                            assigned.add(family)
 
     return nights
 
-# TDOD: Fix as it runs 11001 times currently
-def simulated_annealing(families):
-    T = 1.0
-    T_min = 0.00001
-    alpha = 0.9
+# Orignally I was planning on useing simulating annealing it the generate_schedule function however
+# does not support any way to choose where you are jumping so we are using the much simplier run
+# for a while and keep the best match option.
+def find_schedule(families):
     current_schedule = generate_schedule(families)
-    j = 1
-    while T > T_min:
-        i = 1
-        while i <= 100:
-            new_schedule = generate_schedule(families)
-            cost_diff = cost(new_schedule) - cost(current_schedule)
-            if cost_diff < 0 or random.uniform(0, 1) < math.exp(-cost_diff / T):
-                current_schedule = new_schedule
-            i += 1
-            j += 1
-        T = T*alpha
+    current_score = score(current_schedule)
+
+    # loop whatever number of times you would like
+    # TODO: make this a bit more intellegent, maybe loop till you haven't found a better solution
+    #           in 10k runs or something
+    j = 0
+    k = 0
+    while 100000 > j:
+        j += 1
+        k += 1
+
+        new_schedule = generate_schedule(families)
+        new_score = score(new_schedule)
+        if current_score < new_score:
+            current_schedule = new_schedule
+            current_score = new_score
+            j = 0
+
+    print("runs: " + str(k))
+
     return current_schedule
 
 def main():
@@ -130,7 +212,15 @@ def main():
     args = parser.parse_args()
 
     families = read_csv(args.input)
-    schedule = simulated_annealing(families)
+
+    #for i in range(4):
+
+    schedule = find_schedule(families)
+
+    summery(schedule)
+
+    print("score: " + str(score(schedule)))
+
     write_csv('output.csv', schedule)
 
 if __name__ == "__main__":
