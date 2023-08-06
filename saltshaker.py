@@ -4,6 +4,7 @@ import argparse
 import csv
 import math
 import random
+import threading
 
 class Family:
     def __init__(self, email, size, space, allergies, allergens, repel, attend_nights, host_nights):
@@ -198,6 +199,11 @@ def find_schedule(families):
 
     return current_schedule
 
+# uses find_schedule in a thread
+def find_schedule_thread(families, schedules):
+    schedule = find_schedule(families)
+    schedules.append(schedule)
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("input")
@@ -205,9 +211,27 @@ def main():
 
     families = read_csv(args.input)
 
-    #for i in range(4):
+    schedules = []
+    threads = []
 
-    schedule = find_schedule(families)
+    for i in range(4):
+        threads.append(threading.Thread(target=find_schedule_thread, args=(familes, schedules,)))
+
+    for t in threads:
+        t.join
+
+
+    # find the best schedule from the threads
+    schedule = generate_schedule(schedules[0])
+    current_score = score(schedule)
+    for new_schedule in schedules:
+        new_schedule = generate_schedule(schedules)
+        new_score = score(new_schedule)
+        if current_score < new_score:
+            schedule = new_schedule
+            current_score = new_score
+         
+    #schedule = find_schedule(families)
 
     summery(schedule)
 
