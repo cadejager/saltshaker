@@ -259,10 +259,11 @@ def find_schedule(args, families):
             current_score = new_score
 
             # print out progress
-            summery(current_schedule)
-            print("runs: " + str(k))
-            print("score: " + str(current_score))
-            print("\n\n")
+            if args.verbose:
+                summery(current_schedule)
+                print("runs: " + str(k))
+                print("score: " + str(current_score))
+                print("\n\n")
 
         # keep reseting j till we have ran for the specified time
         if 1000 < j:
@@ -289,6 +290,7 @@ def main():
     parser.add_argument("output")
     parser.add_argument("-t", "--time", default=120, type=int, help="The time to run in seconds")
     parser.add_argument("-T", "--threads", default=8, type=int)
+    parser.add_argument("-v", "--verbose", action='store_true')
     args = parser.parse_args()
 
     families = read_csv(args.input)
@@ -316,8 +318,6 @@ def main():
             schedule = new_schedule
             current_score = new_score
          
-    #schedule = find_schedule(families)
-
     write_csv(args.output, schedule)
 
 if __name__ == "__main__":
