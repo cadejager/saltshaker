@@ -3,8 +3,10 @@
 import argparse
 import csv
 import math
+import multiprocessing
 import random
 import threading
+import time
 
 class Family:
     def __init__(self, email, size, space, host_limit, allergies, allergens, knows, repel,
@@ -203,6 +205,9 @@ def generate_schedule(families):
 # does not support any way to choose where you are jumping so we are using the much simplier run
 # for a while and keep the best match option.
 def find_schedule(families):
+
+    start_time = time.time()
+
     current_schedule = generate_schedule(families)
     current_score = score(current_schedule)
 
@@ -211,7 +216,7 @@ def find_schedule(families):
     #           in 10k runs or something
     j = 0
     k = 0
-    while 1000000 > j:
+    while True:
         j += 1
         k += 1
 
@@ -228,6 +233,13 @@ def find_schedule(families):
             print("score: " + str(current_score))
             print("\n\n")
 
+        # keep reseting j till we have ran for the specified time
+        if 1000 > j:
+            if 60 < time.time() - start_time:
+                break
+            else:
+                j = 0
+
 
     print("runs: " + str(k))
 
@@ -236,7 +248,7 @@ def find_schedule(families):
 # uses find_schedule in a thread
 def find_schedule_thread(families, schedules):
     schedule = find_schedule(families)
-    schedules.append(schedule)
+    schedules.put(schedule)
 
 def main():
     parser = argparse.ArgumentParser()
@@ -247,20 +259,27 @@ def main():
     families = read_csv(args.input)
 
     schedules = []
-    threads = []
+    processes = []
 
-    for i in range(4):
-        threads.append(threading.Thread(target=find_schedule_thread, args=(familes, schedules,)))
+    schedule_q = multiprocessing.Queue()
 
-    for t in threads:
-        t.join
+    for i in range(8):
+        p = multiprocessing.Process(target=find_schedule_thread, args=(families, schedule_q,))
+        processes.append(p)
+        p.start()
 
+    for p in processes:
+        schedules.append(schedule_q.get())
+        p.join
+
+    time.sleep(10)
+
+    print("sch: " + str(len(schedules)))
 
     # find the best schedule from the threads
-    schedule = generate_schedule(schedules[0])
+    schedule = schedules[0]
     current_score = score(schedule)
     for new_schedule in schedules:
-        new_schedule = generate_schedule(schedules)
         new_score = score(new_schedule)
         if current_score < new_score:
             schedule = new_schedule
