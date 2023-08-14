@@ -13,13 +13,27 @@
 # You should have received a copy of the GNU General Public License along with saltshaker. If not,
 # see <https://www.gnu.org/licenses/>. 
 
-import argparse
-import csv
-import math
-import multiprocessing
-import random
-import time
 
+# This is the scheduler the saltshaer project. It takes an input file as shown in examples/in and
+# produces an output file like in examples/out.
+
+
+import argparse, csv, math, multiprocessing, random, time
+
+
+# The class family is basically just a row from the input file.
+#
+# The members represent the following
+# email: The email (also the identifier) fo the family.
+# size: The number of people in the family (that will be attending the dinners)
+# space: The number of people the family can host (including themselves)
+# host_limits: A soft limit on how many times they would like to host
+# allergies: Allergies that families will not go into homes that contain
+# allergens: Allergens that a family's home contains if they are hosting
+# knows: Who the family knows and should be de prioritized in matching
+# repel: Who the family should never share a dinner with
+# attend_nights: The nights the family can attend
+# host_nights: The nights the family can host
 class Family:
     def __init__(self, email, size, space, host_limit, allergies, allergens, knows, repel,
                  attend_nights, host_nights):
@@ -34,6 +48,7 @@ class Family:
         self.attend_nights = attend_nights
         self.host_nights = host_nights
 
+# Reads a csv file in and populates a list of families
 def read_csv(filename):
     families = []
     with open(filename, 'r') as file:
@@ -46,10 +61,13 @@ def read_csv(filename):
             size = int(row[1])
             space = int(row[2])
             host_limit = int(row[3])
+
+            # allergies, allergens, knows, and repel are all space seperated lists
             allergies = row[4].split()
             allergens = row[5].split()
             knows = row[6].split()
             repel = row[7].split()
+
             host_nights = [night == 'Can Host' for night in row[8:]]
             attend_nights = [night == 'Can Attend' or night == 'Can Host' for night in row[8:]]
             families.append(Family(email, size, space, host_limit, allergies, allergens, knows,
@@ -57,6 +75,7 @@ def read_csv(filename):
 
     return families
 
+# writes the result CSV out
 def write_csv(filename, schedule):
     with open(filename, 'w', newline='') as file:
         writer = csv.writer(file)
@@ -81,7 +100,7 @@ def summery(schedule):
     meets = {}
     meals = 0
 
-    for night,hosts in enumerate(schedule):
+    for hosts in schedule:
         for host, attendees in hosts.items():
             host_counts[host] = host_counts.get(host, 0) + 1
             for family in attendees:
@@ -109,12 +128,16 @@ def summery(schedule):
 def score(schedule):
     score = 0
 
+    # this will be a dictonary keyed by a family and with a value of the number of times they host
     host_counts = {}
 
+    # meets is a dictonary keyed by a family and the values are sets of the families they meet
     meets = {}
+
+    # meals is the number of families that have eaten of the course of the entire series
     meals = 0
 
-    for night,hosts in enumerate(schedule):
+    for hosts in schedule:
         for host, attendees in hosts.items():
 
             # massive negivite score for only two families together
@@ -126,15 +149,13 @@ def score(schedule):
                 meals += 1
                 if family not in meets:
                     meets[family] = set()
-                #meets[family].add(attendees.values())
-                for a in attendees:
-                    meets[family].add(a)
+                meets[family].update(attendees)
 
     # large score bonus for feeding everyone
     score += 64 * meals
     # medium negitive score for having someone host a bunch of times
     score -= 16 * max(host_counts.values())
-    # medium negitive score for hosts which are above their limit
+    # medium negitive score for hosts which are above their limit expentional as they go beyond it
     for host in host_counts:
         if host_counts[host] > host.host_limit:
             score -= 16*(2^(host_counts[host]-host.host_limit))
@@ -148,8 +169,6 @@ def score(schedule):
         for match in meets[family]:
             if set(family.knows).intersection(match.knows):
                 score -= 1
-
-
 
     return score
 
@@ -193,7 +212,8 @@ def generate_schedule(families):
 
                             if host not in nights[night]:
                                 # create entry with host at dinner if it doesn't exist
-                                nights[night][host] = [host]
+                                nights[night][host] = set()
+                                nights[night][host].add(host)
                                 # assign the host so they don't doin another dinner
                                 assigned.add(host)
                             else:
@@ -208,7 +228,7 @@ def generate_schedule(families):
                                     break
 
                             # add the new family to the dinner and set them to assigned
-                            nights[night][host].append(family)
+                            nights[night][host].add(family)
                             assigned.add(family)
 
     return nights
