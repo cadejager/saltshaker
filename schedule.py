@@ -18,7 +18,7 @@
 # produces an output file like in examples/out.
 
 
-import argparse, csv, math, multiprocessing, random, time
+import argparse, csv, math, multiprocessing, os, random, time
 
 
 # The class family is basically just a row from the input file.
@@ -289,9 +289,18 @@ def main():
     parser.add_argument("input")
     parser.add_argument("output")
     parser.add_argument("-t", "--time", default=120, type=int, help="The time to run in seconds")
-    parser.add_argument("-T", "--threads", default=8, type=int)
+    parser.add_argument("-p", "--processes", type=int)
     parser.add_argument("-v", "--verbose", action='store_true')
     args = parser.parse_args()
+
+
+    # check if a value was given for processes
+    if None == args.processes:
+        args.processes = os.cpu_count()
+    # os.cpu_count() returns None if it cannot determing the number of CPUs, default to 4
+    if None == args.processes:
+        args.processes = 4
+
 
     families = read_csv(args.input)
 
@@ -300,7 +309,7 @@ def main():
 
     schedule_q = multiprocessing.Queue()
 
-    for i in range(args.threads):
+    for i in range(args.processes):
         p = multiprocessing.Process(target=find_schedule_process, args=(args, families, schedule_q,))
         processes.append(p)
         p.start()
