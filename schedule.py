@@ -1,5 +1,18 @@
 #!/usr/bin/python3
 
+# This file is part of saltshaker.
+#
+# saltshaker is free software: you can redistribute it and/or modify it under the terms of the GNU
+# General Public License as published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# saltshaker is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without
+# even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+# General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along with saltshaker. If not,
+# see <https://www.gnu.org/licenses/>. 
+
 import argparse
 import csv
 import math
@@ -203,7 +216,7 @@ def generate_schedule(families):
 # Orignally I was planning on useing simulating annealing it the generate_schedule function however
 # does not support any way to choose where you are jumping so we are using the much simplier run
 # for a while and keep the best match option.
-def find_schedule(families):
+def find_schedule(args, families):
 
     start_time = time.time()
 
@@ -224,7 +237,6 @@ def find_schedule(families):
         if current_score < new_score:
             current_schedule = new_schedule
             current_score = new_score
-            #j = 0
 
             # print out progress
             summery(current_schedule)
@@ -233,8 +245,8 @@ def find_schedule(families):
             print("\n\n")
 
         # keep reseting j till we have ran for the specified time
-        if 1000 > j:
-            if 60 < time.time() - start_time:
+        if 1000 < j:
+            if args.time < time.time() - start_time:
                 break
             else:
                 j = 0
@@ -245,14 +257,18 @@ def find_schedule(families):
     return current_schedule
 
 # uses find_schedule in a thread
-def find_schedule_thread(families, schedules):
-    schedule = find_schedule(families)
+def find_schedule_process(args, families, schedules):
+    schedule = find_schedule(args, families)
     schedules.put(schedule)
 
 def main():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+            description='Creates a Schedule for Salt shaker dinners'
+            )
     parser.add_argument("input")
     parser.add_argument("output")
+    parser.add_argument("-t", "--time", default=120, type=int, help="The time to run in seconds")
+    parser.add_argument("-T", "--threads", default=8, type=int)
     args = parser.parse_args()
 
     families = read_csv(args.input)
@@ -262,18 +278,14 @@ def main():
 
     schedule_q = multiprocessing.Queue()
 
-    for i in range(8):
-        p = multiprocessing.Process(target=find_schedule_thread, args=(families, schedule_q,))
+    for i in range(args.threads):
+        p = multiprocessing.Process(target=find_schedule_process, args=(args, families, schedule_q,))
         processes.append(p)
         p.start()
 
     for p in processes:
         schedules.append(schedule_q.get())
         p.join
-
-    time.sleep(10)
-
-    print("sch: " + str(len(schedules)))
 
     # find the best schedule from the threads
     schedule = schedules[0]
