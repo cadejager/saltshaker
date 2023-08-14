@@ -6,12 +6,15 @@ import math
 import random
 
 class Family:
-    def __init__(self, email, size, space, allergies, allergens, repel, attend_nights, host_nights):
+    def __init__(self, email, size, space, host_limit, allergies, allergens, knows, repel,
+                 attend_nights, host_nights):
         self.email = email
         self.size = size
         self.space = space
+        self.host_limit = host_limit
         self.allergies = allergies
         self.allergens = allergens
+        self.knows = knows
         self.repel = repel
         self.attend_nights = attend_nights
         self.host_nights = host_nights
@@ -27,12 +30,15 @@ def read_csv(filename):
             email = row[0]
             size = int(row[1])
             space = int(row[2])
-            allergies = row[3].split()
-            allergens = row[4].split()
-            repel = row[5].split()
-            host_nights = [night == 'Can Host' for night in row[6:]]  # get host nights
-            attend_nights = [night == 'Can Attend' or night == 'Can Host' for night in row[6:]]  # Get Attend Nights
-            families.append(Family(email, size, space, allergies, allergens, repel, attend_nights, host_nights))
+            host_limit = int(row[3])
+            allergies = row[4].split()
+            allergens = row[5].split()
+            knows = row[6].split()
+            repel = row[7].split()
+            host_nights = [night == 'Can Host' for night in row[8:]]
+            attend_nights = [night == 'Can Attend' or night == 'Can Host' for night in row[8:]]
+            families.append(Family(email, size, space, host_limit, allergies, allergens, knows,
+                                   repel, attend_nights, host_nights))
 
     return families
 
@@ -78,11 +84,15 @@ def summery(schedule):
 
     print("meals: " + str(meals))
     print("max_hosts: " + str(max_hosts))
-    print("host_counts: " + str(host_counts))
+    hcstring = "Host Counts: "
+    for host in host_counts:
+        hcstring += str(host.email) + ": " + str(host_counts[host]) + ", "
+    print(hcstring)
     print("meets_count: " + str(meets_count))
 
 # Calculates a score for the result
 def score(schedule):
+    score = 0
 
     host_counts = {}
 
@@ -91,6 +101,11 @@ def score(schedule):
 
     for night,hosts in enumerate(schedule):
         for host, attendees in hosts.items():
+
+            # massive negivite score for only two families together
+            if len(attendees) < 3:
+                score -= 512
+
             host_counts[host] = host_counts.get(host, 0) + 1
             for family in attendees:
                 meals += 1
@@ -101,14 +116,25 @@ def score(schedule):
                     meets[family].add(a)
 
     # large score bonus for feeding everyone
-    score = 128 * meals
+    score += 64 * meals
     # medium negitive score for having someone host a bunch of times
     score -= 16 * max(host_counts.values())
+    # medium negitive score for hosts which are above their limit
+    for host in host_counts:
+        if host_counts[host] > host.host_limit:
+            score -= 16*(2^(host_counts[host]-host.host_limit))
     # small negitive score for each hosting
-    score -= 4 * sum(host_counts.values())
+    score -= 8 * sum(host_counts.values())
     # small positive score for more meets
     for family in meets:
         score += len(meets[family])
+    # small negitive score for familys that know each other meeting
+    for family in meets:
+        for match in meets[family]:
+            if set(family.knows).intersection(match.knows):
+                score -= 1
+
+
 
     return score
 
@@ -156,7 +182,8 @@ def generate_schedule(families):
                                 # assign the host so they don't doin another dinner
                                 assigned.add(host)
                             else:
-                                # check if the family is incompatable with any other members at the dinner
+                                # check if the family is incompatable with any other members at the
+                                # dinner
                                 repel = False
                                 for guest in nights[night][host]:
                                     if set(family.repel).intersection(guest.repel):
@@ -183,7 +210,7 @@ def find_schedule(families):
     #           in 10k runs or something
     j = 0
     k = 0
-    while 50000 > j:
+    while 1000000 > j:
         j += 1
         k += 1
 
@@ -192,7 +219,14 @@ def find_schedule(families):
         if current_score < new_score:
             current_schedule = new_schedule
             current_score = new_score
-            j = 0
+            #j = 0
+
+            # print out progress
+            summery(current_schedule)
+            print("runs: " + str(k))
+            print("score: " + str(current_score))
+            print("\n\n")
+
 
     print("runs: " + str(k))
 
@@ -201,6 +235,7 @@ def find_schedule(families):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("input")
+    parser.add_argument("output")
     args = parser.parse_args()
 
     families = read_csv(args.input)
@@ -209,11 +244,7 @@ def main():
 
     schedule = find_schedule(families)
 
-    summery(schedule)
-
-    print("score: " + str(score(schedule)))
-
-    write_csv('output.csv', schedule)
+    write_csv(args.output, schedule)
 
 if __name__ == "__main__":
     main()
