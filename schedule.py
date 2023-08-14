@@ -210,7 +210,7 @@ def find_schedule(families):
     #           in 10k runs or something
     j = 0
     k = 0
-    while 10000 > j:
+    while 1000000 > j:
         j += 1
         k += 1
 
