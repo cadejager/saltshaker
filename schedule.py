@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 
 # This file is part of saltshaker.
 #
@@ -18,7 +18,7 @@
 # produces an output file like in examples/out.
 
 
-import argparse, csv, math, multiprocessing, os, random, time
+import argparse, csv, logging, math, multiprocessing, os, sys, random, time
 
 
 # The class family is basically just a row from the input file.
@@ -95,6 +95,9 @@ def write_csv(filename, schedule):
 
 # writes a summery of the score of the finding
 def summery(schedule):
+
+    log = multiprocessing.get_logger()
+
     host_counts = {}
 
     meets = {}
@@ -116,13 +119,13 @@ def summery(schedule):
     for family in meets:
         meets_count += len(meets[family])
 
-    print("meals: " + str(meals))
-    print("max_hosts: " + str(max_hosts))
+    log.info("meals: " + str(meals))
+    log.info("max_hosts: " + str(max_hosts))
     hcstring = "Host Counts: "
     for host in host_counts:
         hcstring += str(host.email) + ": " + str(host_counts[host]) + ", "
-    print(hcstring)
-    print("meets_count: " + str(meets_count))
+    log.info(hcstring)
+    log.info("meets_count: " + str(meets_count))
 
 # Calculates a score for the result
 def score(schedule):
@@ -238,6 +241,8 @@ def generate_schedule(families):
 # for a while and keep the best match option.
 def find_schedule(args, families):
 
+    log = multiprocessing.get_logger()
+
     start_time = time.time()
 
     current_schedule = generate_schedule(families)
@@ -259,11 +264,9 @@ def find_schedule(args, families):
             current_score = new_score
 
             # print out progress
-            if args.verbose:
-                summery(current_schedule)
-                print("runs: " + str(k))
-                print("score: " + str(current_score))
-                print("\n\n")
+            summery(current_schedule)
+            log.info("runs: " + str(k))
+            log.info("score: " + str(current_score))
 
         # keep reseting j till we have ran for the specified time
         if 1000 < j:
@@ -273,7 +276,7 @@ def find_schedule(args, families):
                 j = 0
 
 
-    print("runs: " + str(k))
+    log.info("runs: " + str(k))
 
     return current_schedule
 
@@ -290,17 +293,25 @@ def main():
     parser.add_argument("output")
     parser.add_argument("-t", "--time", default=120, type=int, help="The time to run in seconds")
     parser.add_argument("-p", "--processes", type=int)
-    parser.add_argument("-v", "--verbose", action='store_true')
+    parser.add_argument("-l", "--log", dest="logLevel", choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
+                        help="Set the logging level", default='WARNING')
     args = parser.parse_args()
 
+    # setup logger
+    log = multiprocessing.log_to_stderr(level=getattr(logging, args.logLevel))
 
-    # check if a value was given for processes
+    # figure out number of processes to use
+    cpu_count = os.cpu_count()
+    if None == cpu_count:
+        log.warning('OS not reporting cpu_count')
     if None == args.processes:
-        args.processes = os.cpu_count()
-    # os.cpu_count() returns None if it cannot determing the number of CPUs, default to 4
-    if None == args.processes:
-        args.processes = 4
-
+        if None == cpu_count:
+            log.warning('please specifiy number of processes to use with -p')
+            sys.exit(1)
+        else:
+            args.processes = cpu_count
+    if None != cpu_count and cpu_count < args.processes:
+        log.warning('%d processes requested, system only reports %d cpus' % (args.processes, cpu_count))
 
     families = read_csv(args.input)
 
