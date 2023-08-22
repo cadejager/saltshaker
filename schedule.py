@@ -193,27 +193,29 @@ def score(schedule):
 # it does not gurentee that all guests are given a host so... make sure that is a priority in
 # the cost function
 def generate_schedule(families):
-    nights = [{} for _ in range(len(families[0].attend_nights))]  # Initialize schedule
-    for night in range(len(families[0].attend_nights)):
+    schedule = [{} for _ in range(len(families[0].attend_nights))]  # Initialize schedule
+    nights = range(len(families[0].attend_schedule))
+    random.shuffle(nights)
+    for night in nights:
         assigned = set()  # Keep track of families that have been assigned to a dinner
         random.shuffle(families)  # Shuffle the list of families
         for host in families:
 
             # check if host can host that night
-            if host.host_nights[night] and host not in assigned:
+            if host.host_schedule[night] and host not in assigned:
 
                 # Try to find attendees for this host
                 for family in families:
                     
-                    if family.attend_nights[night] and family != host and family not in assigned:
+                    if family.attend_schedule[night] and family != host and family not in assigned:
 
                         # Calculate remaning capacity of host
-                        if host not in nights[night]:
+                        if host not in schedule[night]:
                             # no entry just subract host's own size from space
                             host_capacity = host.space - host.size
                         else:
                             # see how much is already filled
-                            host_capacity = host.space - sum(g.size for g in nights[night][host])
+                            host_capacity = host.space - sum(g.size for g in schedule[night][host])
 
                         # Check if adding this family would exceed the host's capacity
                         if host_capacity >= family.size:
@@ -226,17 +228,17 @@ def generate_schedule(families):
                             if set(host.repel).intersection(family.repel):
                                 break
 
-                            if host not in nights[night]:
+                            if host not in schedule[night]:
                                 # create entry with host at dinner if it doesn't exist
-                                nights[night][host] = set()
-                                nights[night][host].add(host)
+                                schedule[night][host] = set()
+                                schedule[night][host].add(host)
                                 # assign the host so they don't doin another dinner
                                 assigned.add(host)
                             else:
                                 # check if the family is incompatable with any other members at the
                                 # dinner
                                 repel = False
-                                for guest in nights[night][host]:
+                                for guest in schedule[night][host]:
                                     if set(family.repel).intersection(guest.repel):
                                         repel = True
                                         break
@@ -244,10 +246,10 @@ def generate_schedule(families):
                                     break
 
                             # add the new family to the dinner and set them to assigned
-                            nights[night][host].add(family)
+                            schedule[night][host].add(family)
                             assigned.add(family)
 
-    return nights
+    return schedule
 
 # Orignally I was planning on useing simulating annealing it the generate_schedule function however
 # does not support any way to choose where you are jumping so we are using the much simplier run
