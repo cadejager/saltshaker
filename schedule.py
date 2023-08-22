@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 
 # This file is part of saltshaker.
 #
@@ -18,7 +18,7 @@
 # produces an output file like in examples/out.
 
 
-import argparse, csv, math, multiprocessing, os, random, time
+import argparse, csv, logging, math, multiprocessing, os, sys, random, time
 
 
 # The class family is basically just a row from the input file.
@@ -47,6 +47,19 @@ class Family:
         self.repel = repel
         self.attend_nights = attend_nights
         self.host_nights = host_nights
+    def __repr__(self):
+        return "Family(%s,%d,%d,%d,%s,%s,%s,%s)" % (self.email, self.size, self.space, self.host_limit, self.allergies, self.allergens, self.knows, self.repels)
+    def __str__(self):
+        return "Family: %s" % (self.email)
+    def __eq__(self, other):
+        if isinstance(other, Family):
+            return (self.email == other.email)
+        else:
+            return False
+    def __ne__(self, other):
+        return (not self.__eq__(other))
+    def __hash__(self):
+        return hash(self.email)
 
 # Reads a csv file in and populates a list of families
 def read_csv(filename):
@@ -95,6 +108,9 @@ def write_csv(filename, schedule):
 
 # writes a summery of the score of the finding
 def summery(schedule):
+
+    log = multiprocessing.get_logger()
+
     host_counts = {}
 
     meets = {}
@@ -116,13 +132,13 @@ def summery(schedule):
     for family in meets:
         meets_count += len(meets[family])
 
-    print("meals: " + str(meals))
-    print("max_hosts: " + str(max_hosts))
+    log.info("meals: " + str(meals))
+    log.info("max_hosts: " + str(max_hosts))
     hcstring = "Host Counts: "
     for host in host_counts:
         hcstring += str(host.email) + ": " + str(host_counts[host]) + ", "
-    print(hcstring)
-    print("meets_count: " + str(meets_count))
+    log.info(hcstring)
+    log.info("meets_count: " + str(meets_count))
 
 # Calculates a score for the result
 def score(schedule):
@@ -145,14 +161,14 @@ def score(schedule):
                 score -= 512
 
             host_counts[host] = host_counts.get(host, 0) + 1
+            meals += len(attendees)
             for family in attendees:
-                meals += 1
                 if family not in meets:
                     meets[family] = set()
                 meets[family].update(attendees)
 
     # large score bonus for feeding everyone
-    score += 64 * meals
+    score += 128 * meals
     # medium negitive score for having someone host a bunch of times
     score -= 16 * max(host_counts.values())
     # medium negitive score for hosts which are above their limit expentional as they go beyond it
@@ -238,6 +254,8 @@ def generate_schedule(families):
 # for a while and keep the best match option.
 def find_schedule(args, families):
 
+    log = multiprocessing.get_logger()
+
     start_time = time.time()
 
     current_schedule = generate_schedule(families)
@@ -259,11 +277,9 @@ def find_schedule(args, families):
             current_score = new_score
 
             # print out progress
-            if args.verbose:
-                summery(current_schedule)
-                print("runs: " + str(k))
-                print("score: " + str(current_score))
-                print("\n\n")
+            summery(current_schedule)
+            log.info("runs: " + str(k))
+            log.info("score: " + str(current_score))
 
         # keep reseting j till we have ran for the specified time
         if 1000 < j:
@@ -273,7 +289,7 @@ def find_schedule(args, families):
                 j = 0
 
 
-    print("runs: " + str(k))
+    log.info("runs: " + str(k))
 
     return current_schedule
 
@@ -281,6 +297,32 @@ def find_schedule(args, families):
 def find_schedule_process(args, families, schedules):
     schedule = find_schedule(args, families)
     schedules.put(schedule)
+
+# counts the number of requested meals
+def count_meals(families):
+    meals = 0
+    for family in families:
+        meals += len(family.attend_nights)
+    return meals
+
+def find_starved_family(families, schedule):
+
+    log = multiprocessing.get_logger()
+
+    starved_count = 0
+
+    for family in families:
+        for night in range(len(family.attend_nights)):
+            served = False
+            for host in schedule[night]:
+                if family in schedule[night][host]:
+                    served = True
+            if not served:
+                log.warning(family.email + " not served night # " + str(night))
+                starved_count += 1
+
+    if 0 != starved_count:
+        log.warning("%d Family-meals starved" % (starved_count))
 
 def main():
     parser = argparse.ArgumentParser(
@@ -290,17 +332,25 @@ def main():
     parser.add_argument("output")
     parser.add_argument("-t", "--time", default=120, type=int, help="The time to run in seconds")
     parser.add_argument("-p", "--processes", type=int)
-    parser.add_argument("-v", "--verbose", action='store_true')
+    parser.add_argument("-l", "--log", dest="logLevel", choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
+                        help="Set the logging level", default='WARNING')
     args = parser.parse_args()
 
+    # setup logger
+    log = multiprocessing.log_to_stderr(level=getattr(logging, args.logLevel))
 
-    # check if a value was given for processes
+    # figure out number of processes to use
+    cpu_count = os.cpu_count()
+    if None == cpu_count:
+        log.warning('OS not reporting cpu_count')
     if None == args.processes:
-        args.processes = os.cpu_count()
-    # os.cpu_count() returns None if it cannot determing the number of CPUs, default to 4
-    if None == args.processes:
-        args.processes = 4
-
+        if None == cpu_count:
+            log.warning('please specifiy number of processes to use with -p')
+            sys.exit(1)
+        else:
+            args.processes = cpu_count
+    if None != cpu_count and cpu_count < args.processes:
+        log.warning('%d processes requested, system only reports %d cpus' % (args.processes, cpu_count))
 
     families = read_csv(args.input)
 
@@ -326,7 +376,14 @@ def main():
         if current_score < new_score:
             schedule = new_schedule
             current_score = new_score
+
+    
+    summery(schedule)
          
+    log.warning("Total Possible Meals: " + str(count_meals(families)))
+
+    find_starved_family(families, schedule)
+
     write_csv(args.output, schedule)
 
 if __name__ == "__main__":
