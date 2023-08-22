@@ -194,20 +194,20 @@ def score(schedule):
 # the cost function
 def generate_schedule(families):
     schedule = [{} for _ in range(len(families[0].attend_nights))]  # Initialize schedule
-    nights = range(len(families[0].attend_schedule))
-    random.shuffle(nights)
+    nights = range(len(families[0].attend_nights))
+    #random.shuffle(nights)
     for night in nights:
         assigned = set()  # Keep track of families that have been assigned to a dinner
         random.shuffle(families)  # Shuffle the list of families
         for host in families:
 
             # check if host can host that night
-            if host.host_schedule[night] and host not in assigned:
+            if host.host_nights[night] and host not in assigned:
 
                 # Try to find attendees for this host
                 for family in families:
                     
-                    if family.attend_schedule[night] and family != host and family not in assigned:
+                    if family.attend_nights[night] and family != host and family not in assigned:
 
                         # Calculate remaning capacity of host
                         if host not in schedule[night]:
@@ -304,7 +304,9 @@ def find_schedule_process(args, families, schedules):
 def count_meals(families):
     meals = 0
     for family in families:
-        meals += len(family.attend_nights)
+        for attend in family.attend_nights:
+            if attend:
+                meals += 1
     return meals
 
 def find_starved_family(families, schedule):
