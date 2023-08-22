@@ -304,9 +304,7 @@ def find_schedule_process(args, families, schedules):
 def count_meals(families):
     meals = 0
     for family in families:
-        for attend in family.attend_nights:
-            if attend:
-                meals += 1
+        meals += family.attend_nights.count(True)
     return meals
 
 def find_starved_family(families, schedule):
@@ -317,6 +315,8 @@ def find_starved_family(families, schedule):
 
     for family in families:
         for night in range(len(family.attend_nights)):
+            if not family.attend_nights[night]:
+                continue
             served = False
             for host in schedule[night]:
                 if family in schedule[night][host]:
