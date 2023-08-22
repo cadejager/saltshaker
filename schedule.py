@@ -193,16 +193,20 @@ def score(schedule):
 # it does not gurentee that all guests are given a host so... make sure that is a priority in
 # the cost function
 def generate_schedule(families):
+
+    # this will be a dictonary keyed by a family and with a value of the number of times they host
+    host_counts = dict.fromkeys(families, 0)
+
     schedule = [{} for _ in range(len(families[0].attend_nights))]  # Initialize schedule
-    nights = range(len(families[0].attend_nights))
-    #random.shuffle(nights)
+    nights = list(range(len(families[0].attend_nights)))
+    random.shuffle(nights)
     for night in nights:
         assigned = set()  # Keep track of families that have been assigned to a dinner
         random.shuffle(families)  # Shuffle the list of families
         for host in families:
 
             # check if host can host that night
-            if host.host_nights[night] and host not in assigned:
+            if host.host_nights[night] and host not in assigned and host_counts[host] < host.host_limit:
 
                 # Try to find attendees for this host
                 for family in families:
@@ -227,6 +231,9 @@ def generate_schedule(families):
                             # check if host repels family
                             if set(host.repel).intersection(family.repel):
                                 break
+
+                            # This host is hosting increment their count
+                            host_counts[host] += 1
 
                             if host not in schedule[night]:
                                 # create entry with host at dinner if it doesn't exist
