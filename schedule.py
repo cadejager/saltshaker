@@ -170,11 +170,11 @@ def score(schedule):
     # large score bonus for feeding everyone
     score += 128 * meals
     # medium negitive score for having someone host a bunch of times
-    score -= 16 * max(host_counts.values())
+    score -= 32 * max(host_counts.values())
     # medium negitive score for hosts which are above their limit expentional as they go beyond it
-    for host in host_counts:
-        if host_counts[host] > host.host_limit:
-            score -= 16*(2^(host_counts[host]-host.host_limit))
+    #for host in host_counts:
+    #    if host_counts[host] > host.host_limit:
+    #        score -= 16*(2^(host_counts[host]-host.host_limit))
     # small negitive score for each hosting
     score -= 8 * sum(host_counts.values())
     # small positive score for more meets
@@ -232,15 +232,13 @@ def generate_schedule(families):
                             if set(host.repel).intersection(family.repel):
                                 break
 
-                            # This host is hosting increment their count
-                            host_counts[host] += 1
-
                             if host not in schedule[night]:
                                 # create entry with host at dinner if it doesn't exist
                                 schedule[night][host] = set()
                                 schedule[night][host].add(host)
                                 # assign the host so they don't doin another dinner
                                 assigned.add(host)
+                                host_counts[host] += 1
                             else:
                                 # check if the family is incompatable with any other members at the
                                 # dinner
