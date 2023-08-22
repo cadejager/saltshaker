@@ -47,6 +47,19 @@ class Family:
         self.repel = repel
         self.attend_nights = attend_nights
         self.host_nights = host_nights
+    def __repr__(self):
+        return "Family(%s,%d,%d,%d,%s,%s,%s,%s)" % (self.email, self.size, self.space, self.host_limit, self.allergies, self.allergens, self.knows, self.repels)
+    def __str__(self):
+        return "Family: %s" % (self.email)
+    def __eq__(self, other):
+        if isinstance(other, Family):
+            return (self.email == other.email)
+        else:
+            return False
+    def __ne__(self, other):
+        return (not self.__eq__(other))
+    def __hash__(self):
+        return hash(self.email)
 
 # Reads a csv file in and populates a list of families
 def read_csv(filename):
@@ -148,14 +161,14 @@ def score(schedule):
                 score -= 512
 
             host_counts[host] = host_counts.get(host, 0) + 1
+            meals += len(attendees)
             for family in attendees:
-                meals += 1
                 if family not in meets:
                     meets[family] = set()
                 meets[family].update(attendees)
 
     # large score bonus for feeding everyone
-    score += 64 * meals
+    score += 128 * meals
     # medium negitive score for having someone host a bunch of times
     score -= 16 * max(host_counts.values())
     # medium negitive score for hosts which are above their limit expentional as they go beyond it
@@ -285,6 +298,32 @@ def find_schedule_process(args, families, schedules):
     schedule = find_schedule(args, families)
     schedules.put(schedule)
 
+# counts the number of requested meals
+def count_meals(families):
+    meals = 0
+    for family in families:
+        meals += len(family.attend_nights)
+    return meals
+
+def find_starved_family(families, schedule):
+
+    log = multiprocessing.get_logger()
+
+    starved_count = 0
+
+    for family in families:
+        for night in range(len(family.attend_nights)):
+            served = False
+            for host in schedule[night]:
+                if family in schedule[night][host]:
+                    served = True
+            if not served:
+                log.warning(family.email + " not served night # " + str(night))
+                starved_count += 1
+
+    if 0 != starved_count:
+        log.warning("%d Family-meals starved" % (starved_count))
+
 def main():
     parser = argparse.ArgumentParser(
             description='Creates a Schedule for Salt shaker dinners'
@@ -337,7 +376,14 @@ def main():
         if current_score < new_score:
             schedule = new_schedule
             current_score = new_score
+
+    
+    summery(schedule)
          
+    log.warning("Total Possible Meals: " + str(count_meals(families)))
+
+    find_starved_family(families, schedule)
+
     write_csv(args.output, schedule)
 
 if __name__ == "__main__":
