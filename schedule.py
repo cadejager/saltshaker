@@ -48,7 +48,7 @@ class Family:
         self.attend_nights = attend_nights
         self.host_nights = host_nights
     def __repr__(self):
-        return "Family(%s,%d,%d,%d,%s,%s,%s,%s)" % (self.email, self.size, self.space, self.host_limit, self.allergies, self.allergens, self.knows, self.repels)
+        return "Family(%s,%d,%d,%d,%s,%s,%s,%s)" % (self.email, self.size, self.space, self.host_limit, self.allergies, self.allergens, self.knows, self.repel)
     def __str__(self):
         return "Family: %s" % (self.email)
     def __eq__(self, other):
@@ -76,10 +76,10 @@ def read_csv(filename):
             host_limit = int(row[3])
 
             # allergies, allergens, knows, and repel are all space seperated lists
-            allergies = row[4].split()
-            allergens = row[5].split()
-            knows = row[6].split()
-            repel = row[7].split()
+            allergies = set(row[4].split())
+            allergens = set(row[5].split())
+            knows = set(row[6].split())
+            repel = set(row[7].split())
 
             host_nights = [night == 'Can Host' for night in row[8:]]
             attend_nights = [night == 'Can Attend' or night == 'Can Host' for night in row[8:]]
@@ -164,8 +164,9 @@ def score(schedule):
             meals += len(attendees)
             for family in attendees:
                 if family not in meets:
-                    meets[family] = set()
-                meets[family].update(attendees)
+                    meets[family] = set(attendees)
+                else:
+                    meets[family].update(attendees)
 
     # large score bonus for feeding everyone
     score += 128 * meals
@@ -180,8 +181,7 @@ def score(schedule):
     # small positive score for more meets
     for family in meets:
         score += len(meets[family])
-    # small negitive score for familys that know each other meeting
-    for family in meets:
+        # small negitive score for familys that know each other meeting
         for match in meets[family]:
             if set(family.knows).intersection(match.knows):
                 score -= 1
@@ -234,8 +234,7 @@ def generate_schedule(families):
 
                             if host not in schedule[night]:
                                 # create entry with host at dinner if it doesn't exist
-                                schedule[night][host] = set()
-                                schedule[night][host].add(host)
+                                schedule[night][host] = {host}
                                 # assign the host so they don't doin another dinner
                                 assigned.add(host)
                                 host_counts[host] += 1
@@ -244,7 +243,7 @@ def generate_schedule(families):
                                 # dinner
                                 repel = False
                                 for guest in schedule[night][host]:
-                                    if set(family.repel).intersection(guest.repel):
+                                    if family.repel.intersection(guest.repel):
                                         repel = True
                                         break
                                 if repel:
@@ -253,6 +252,70 @@ def generate_schedule(families):
                             # add the new family to the dinner and set them to assigned
                             schedule[night][host].add(family)
                             assigned.add(family)
+
+    # look though the schedule created and move parties around to try to fill small groups
+    # full_dinners we can borrow from, fill_dinners need guests
+    full_dinners = {}
+    fill_dinners = {}
+    for night in range(len(schedule)):
+        full_dinners[night] = {}
+
+        for host,dinner in schedule[night].items():
+            dinner_size = sum(g.size for g in dinner)
+            host_capacity = host.space - dinner_size
+
+            if 0 == host_capacity:
+                # find the full dinner
+                full_dinners[night][host] = dinner
+
+            elif 2 <= host_capacity:
+                # find the dinenrs to add guests to
+                fill_dinners[(night, host)] = dinner
+
+    # try to fill the low dinners
+    while fill_dinners:
+        # get the next dinner to fill, pop it off so we don't get stuck in this loop forever
+        (night, fill_host) = next(iter(fill_dinners))
+        fill_dinner = fill_dinners.pop((night, fill_host))
+
+        fill_dinner_size = sum(g.size for g in fill_dinner)
+        fill_host_capacity = fill_host.space - fill_dinner_size
+
+        full_hosts = list(full_dinners[night])
+        random.shuffle(full_hosts)
+        for full_host in full_hosts:
+            full_dinner = full_dinners[night][full_host]
+            full_dinner_size = sum(g.size for g in full_dinner)
+            dinner_filled = False
+
+            # only borrow from a dinner that is larger than the current dinner
+            if fill_dinner_size < full_dinner_size:
+                for full_guest in full_dinner:
+                    # look for a guest that will get us within 1 of max capacity, and not the host of the other dinner
+                    if fill_host_capacity - 1 == full_guest.size and full_guest != full_host:
+                        # check if the family is incompatable with any other members at the
+                        # dinner
+                        repel = False
+                        for guest in schedule[night][fill_host]:
+                            if full_guest.repel.intersection(guest.repel):
+                                repel = True
+                                break
+                        if repel:
+                            break
+
+                        fill_dinner.add(full_guest)
+                        full_dinner.remove(full_guest)
+                        del full_dinners[night][full_host]
+
+                        # add full_dinner to fill_dinners if the guest removed was greater than 1
+                        if 1 < full_guest.size:
+                            fill_dinners[(night, full_host)] = full_dinner
+
+                        dinner_filled = True
+                        break
+
+            if dinner_filled:
+                break
 
     return schedule
 
