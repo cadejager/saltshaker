@@ -150,15 +150,13 @@ def score_host(schedule):
     # this will be a dictonary keyed by a family and with a value of the number of times they host
     host_counts = {}
 
-    #meals=0
-
-    for hosts in schedule:
-        for host, attendees in hosts.items():
-    #        meals += len(attendees)
+    for night in range(len(schedule)):
+        for host in schedule[night]:
             host_counts[host] = host_counts.get(host, 0) + 1
+            # penlize repeat dinners
+            if 0 < night and host in schedule[night-1]:
+                score -= 16
 
-    #score += 128 * meals
-    #print(("Meals: %d" % meals))
 
     # the ratio of meals each host does
     host_ratios = {}
@@ -167,18 +165,11 @@ def score_host(schedule):
 
     host_ratio_average = sum(host_ratios.values())/len(host_ratios)
 
-    # penlized difference from ratdiots, TODO: make the penitilies exponitial
+    # penlized difference from ratiots
     for ratio in host_ratios.values():
-        score -= abs(ratio-host_ratio_average)
+        score -= 48**abs(ratio-host_ratio_average)
 
-    # medium negitive score for having someone host a bunch of times
-    #score -= 32 * max(host_counts.values())
-    # medium negitive score for hosts which are above their limit expentional as they go beyond it
-    #for host in host_counts:
-    #    if host_counts[host] > host.host_limit:
-    #        score -= 16*(2^(host_counts[host]-host.host_limit))
-    # small negitive score for each hosting
-    #score -= 8 * sum(host_counts.values())
+    # TODO: the Laura option
 
     return score
 
@@ -264,189 +255,6 @@ def generate_host_schedule(families):
             
     return schedule
 
-
-# Generates a schedule from the list families. This function gurentees that the repel families
-# are not together and that guests are not assigned to a house with their alergies.
-# it does not gurentee that all guests are given a host so... make sure that is a priority in
-# the cost function
-def generate_schedule(families):
-
-    # this will be a dictonary keyed by a family and with a value of the number of times they host
-    host_counts = dict.fromkeys(families, 0)
-
-    schedule = [{} for _ in range(len(families[0].attend_nights))]  # Initialize schedule
-    nights = list(range(len(families[0].attend_nights)))
-    random.shuffle(nights)
-
-    for night in nights:
-        # Find all the families that need a dinner this night and count how many seats are needed
-        families_tonight = []
-        needed_seats = 0 # the number of seats needed for the night
-        for family in families:
-            if family.attend_nights[night]:
-                families_tonight.append(family)
-                needed_seats += family.size
-
-        assigned = set()  # Keep track of families that have been assigned to a dinner
-        random.shuffle(families_tonight)  # Shuffle the list of families
-
-        # assign the hosts
-        hosts_tonight = []
-        for host in families_tonight:
-            if host.host_nights[night] and (None == host.host_limit or
-                                            host_counts[host] < host.host_limit):
-                hosts_tonight.append(host)
-                schedule[night][host] = {host}
-                assigned.add(host)
-                host_counts[host] += 1
-                needed_seats -= host.space
-            if 0 >= needed_seats:
-                break
-
-        for host in hosts_tonight:
-            host_capacity = host.space - host.size
-            for guest in families_tonight:
-
-                # check if the guest is avaiable and not allergic to the host
-                if      guest in assigned or \
-                        guest.allergies.intersection(host.allergens) or \
-                        host_capacity < guest.size:
-                    continue
-
-                # check for repels
-                repel = False
-                for other in schedule[night][host]:
-                    if guest.repel.intersection(other.repel):
-                        repel = True
-                        break
-                if repel:
-                    continue
-
-                schedule[night][host].add(guest)
-                assigned.add(guest)
-                host_capacity -= guest.size
-
-#        # we will not try to assign unassinged guests and even out dinner
-#        unassigned = set()
-#        for guest in families_tonight:
-#            if guest not in assigned:
-#                unassigned.add(guest)
-#
-#        # look for dinners that are relitivally empty
-#        # full_dinners we can borrow from, fill_dinners need guests
-#        full_dinners = {}
-#        fill_dinners = {}
-#        for host,dinner in schedule[night].items():
-#            dinner_size = sum(g.size for g in dinner)
-#            extra_space = host.space - dinner_size
-#
-#            if 0 == extra_space:
-#                # find the full dinner
-#                full_dinners[host] = dinner
-#            else:
-#                fill_dinners[host] = dinner
-#       
-#        if unassigned:
-#            # since there are unassigned guests we are going to try to pack the fill dinners
-#            # together to get as large a space as possible for unassigned guests
-#
-#            for to_host in fill_dinners.copy():
-#                to_dinner = fill_dinners[to_host]
-#                to_dinner_capacity = to_host.space - sum(guest.size for guest in to_dinner)
-#                for from_host in fill_dinners.copy():
-#                    # don't do a swap from the same dinner
-#                    if from_host == to_host:
-#                        continue
-#
-#                    from_dinner = fill_dinners[from_host]
-#                    for guest in from_dinner.copy():
-#                        if      guest.allergies.intersection(to_host.allergens) or \
-#                                to_dinner_capacity < guest.size:
-#                            continue
-#                        # check for repels
-#                        repel = False
-#                        for other in to_dinner:
-#                            if guest.repel.intersection(other.repel):
-#                                repel = True
-#                                break
-#                        if repel:
-#                            continue
-#                        to_dinner.add(guest)
-#                        from_dinner.remove(guest)
-#                        to_dinner_capacity -= guest.size
-#                        if 0 == to_dinner_capacity:
-#                            del fill_dinners[to_host]
-#                            break
-#                    if to_host not in fill_dinners:
-#                        break
-#
-#            # see if there is room for the unassigned now that we have packed all the empty spots together
-#            for fill_host in fill_dinners.copy():
-#                fill_dinner = fill_dinners[fill_host]
-#                fill_dinner_capacity = fill_host.space - sum(guest.size for guest in fill_dinner)
-#                for guest in unassigned.copy():
-#                    if      guest.allergies.intersection(fill_host.allergens) or \
-#                            fill_dinner_capacity < guest.size:
-#                        continue
-#                    # check for repels
-#                    repel = False
-#                    for other in fill_dinner:
-#                        if guest.repel.intersection(other.repel):
-#                            repel = True
-#                            break
-#                    if repel:
-#                        continue
-#                    fill_dinner.add(guest)
-#                    unassigned.remove(guest)
-#                    fill_dinner_capacity -= guest.size
-#                    if 0 == fill_dinner_capacity:
-#                        del fill_dinners[fill_host]
-#
-#        # now we shuffle dinners around to even out the not full dinners
-#        while fill_dinners:
-#            fill_host = next(iter(fill_dinners))
-#            fill_dinner = fill_dinners.pop(fill_host)
-#
-#            fill_dinner_size = sum(g.size for g in fill_dinner)
-#            fill_host_capacity = fill_host.space - fill_dinner_size
-#
-#            full_hosts = list(full_dinners)
-#            random.shuffle(full_hosts)
-#            for full_host in full_hosts:
-#                full_dinner = full_dinners[full_host]
-#                full_dinner_size = sum(g.size for g in full_dinner)
-#                dinner_filled = False
-#
-#                # only borrow from a dinner that is larger than the current dinner
-#                if fill_dinner_size < full_dinner_size:
-#                    for full_guest in full_dinner:
-#                        # look for a guest that will get us within 1 of max capacity, and not the host of the other dinner
-#                        if fill_host_capacity - 1 == full_guest.size and full_guest != full_host:
-#                            # check if the family is incompatable with any other members at the
-#                            # dinner
-#                            repel = False
-#                            for guest in schedule[night][fill_host]:
-#                                if full_guest.repel.intersection(guest.repel):
-#                                    repel = True
-#                                    break
-#                            if repel:
-#                                continue
-#
-#                            fill_dinner.add(full_guest)
-#                            full_dinner.remove(full_guest)
-#                            del full_dinners[full_host]
-#
-#                            # add full_dinner to fill_dinners if the guest removed was greater than 1
-#                            if 1 < full_guest.size:
-#                                fill_dinners[full_host] = full_dinner
-#
-#                            dinner_filled = True
-#                            break
-#
-#                if dinner_filled:
-#                    break
-
-    return schedule
 
 # Orignally I was planning on useing simulating annealing it the generate_schedule function however
 # does not support any way to choose where you are jumping so we are using the much simplier run
@@ -557,7 +365,7 @@ def optimize_schedule(args, families, host_schedule, schedules):
 
     start_time = time.time()
 
-    current_schedule = generate_schedule(families)
+    current_schedule = fill_schedule(families, host_schedule)
     current_score = score_guest(current_schedule)
 
     # loop whatever number of times you would like
