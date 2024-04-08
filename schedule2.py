@@ -236,32 +236,23 @@ def generate_host_schedule(families):
                     hosts_tonight[family] = family.space - family.size
 
         # can't suffle a dictionay so need a list list for hosts tonight
-        #host_list_tonight = list(hosts_tonight.keys())
-        #random.shuffle(host_list_tonight)
+        host_list_tonight = list(hosts_tonight.keys())
+        random.shuffle(host_list_tonight)
         
-        #print(sorted(allergies_tonight.keys(), key=lambda l: (len(l), l), reverse=False))
-
         seats_before = sum(allergies_tonight.values())
-        
-        #print('allergy step about to begin')
-        #print("allergy start:hosts %d" % (len(host_list_tonight)))
-        #print(allergies_tonight.keys())
+
         # find hosts for each allergy
         # TODO: sort allgesy by most restrictive first (allergies with the fewest hosts that can accomidate them)
-        for allergy in allergies_tonight.keys(): # sorted(allergies_tonight.keys(), key=lambda l: (len(l), l), reverse=False):
-            host_list_tonight = list(hosts_tonight.keys())
-            random.shuffle(host_list_tonight)
-            #print("allergy ongoing: %s, size %d, hosts %d" % (allergy, allergies_tonight[allergy], len(host_list_tonight)))
+        for allergy in sorted(allergies_tonight.keys(), key=lambda l: (len(l), l), reverse=True):
             for host in host_list_tonight:
-                if not allergy.intersection(host.allergens):
-                    # Remove the host size from their allergy
+                if (host in hosts_tonight) and (not allergy.intersection(host.allergens)):
                     if host not in schedule[night]:
-                        allergies_tonight[host.allergies] -= host.size
+                        allergies_tonight[host.allergies] -= host.size # Remove the host size from their allergy
                         schedule[night][host] = {host} # add the host to the schedule
                         host_counts[host] += 1
 
                     # recaculate required space for allergy as well as space requried for allergy set
-                    host_space_remaining = int(hosts_tonight[host])
+                    host_space_remaining = hosts_tonight[host]
                     hosts_tonight[host] -= allergies_tonight[allergy]
                     allergies_tonight[allergy] -= host_space_remaining
 
@@ -270,23 +261,6 @@ def generate_host_schedule(families):
                         del hosts_tonight[host]
                     if 0 >= allergies_tonight[allergy]:
                         break
-        
-        seats_after = 0
-        for host in schedule[night]:
-            seats_after += host.space
-
-        potential = 0
-        for host in families:
-            potential += host.space
-
-        for allergy in allergies_tonight.keys():
-            if 0 < allergies_tonight[allergy]:
-                print(allergy)
-                print("Warning: %d people not fed" % (allergies_tonight[allergy]))
-                print("potential: %d, before: %d, after %d, hosts left: %d" % (potential, seats_before,seats_after))
-            #else:
-            #    print(allergy)
-            #    print("all fed")
             
     return schedule
 
