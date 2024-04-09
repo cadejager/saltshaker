@@ -26,7 +26,7 @@ import argparse, csv, logging, math, multiprocessing, os, sys, random, time
 # email: The email (also the identifier) fo the family.
 # size: The number of people in the family (that will be attending the dinners)
 # space: The number of people the family can host (including themselves)
-# host_limits: A soft limit on how many times they would like to host
+# host_targets: A soft limit on how many times they would like to host
 # allergies: Allergies that families will not go into homes that contain
 # allergens: Allergens that a family's home contains if they are hosting
 # knows: Who the family knows and should be de prioritized in matching
@@ -34,12 +34,12 @@ import argparse, csv, logging, math, multiprocessing, os, sys, random, time
 # attend_nights: The nights the family can attend
 # host_nights: The nights the family can host
 class Family:
-    def __init__(self, email, size, space, host_limit, allergies, allergens, knows, repel,
+    def __init__(self, email, size, space, host_target, allergies, allergens, knows, repel,
                  attend_nights, host_nights, nights_count):
         self.email = email
         self.size = size
         self.space = space
-        self.host_limit = host_limit
+        self.host_target = host_target
         self.allergies = allergies
         self.allergens = allergens
         self.knows = knows
@@ -48,7 +48,7 @@ class Family:
         self.host_nights = host_nights
         self.nights_count = nights_count
     def __repr__(self):
-        return "Family(%s,%d,%d,%d,%s,%s,%s,%s,%d)" % (self.email, self.size, self.space, self.host_limit, self.allergies, self.allergens, self.knows, self.repel, self.nights_count)
+        return "Family(%s,%d,%d,%d,%s,%s,%s,%s,%d)" % (self.email, self.size, self.space, self.host_target, self.allergies, self.allergens, self.knows, self.repel, self.nights_count)
     def __str__(self):
         return "Family: %s" % (self.email)
     def __eq__(self, other):
@@ -73,7 +73,7 @@ def read_csv(filename):
             email = row[0]
             size = int(row[1])
             space = int(row[2])
-            host_limit = int(row[3]) if row[3] else None
+            host_target = int(row[3]) if row[3] else None
 
             # allergies, allergens, knows, and repel are all space seperated lists
             allergies = frozenset(row[4].split())
@@ -86,7 +86,7 @@ def read_csv(filename):
 
             nights_count = sum(attend_nights)
 
-            families.append(Family(email, size, space, host_limit, allergies, allergens, knows,
+            families.append(Family(email, size, space, host_target, allergies, allergens, knows,
                                    repel, attend_nights, host_nights, nights_count))
 
     return families
@@ -152,7 +152,9 @@ def score_host(schedule):
 
     for night in range(len(schedule)):
         for host in schedule[night]:
-            host_counts[host] = host_counts.get(host, 0) + 1
+            # calculate ratios for hosts that don't ask to host an exact number of meals
+            if None == host.host_target:
+                host_counts[host] = host_counts.get(host, 0) + 1
             # penlize repeat dinners
             if 0 < night and host in schedule[night-1]:
                 score -= 16
@@ -168,8 +170,6 @@ def score_host(schedule):
     # penlized difference from ratiots
     for ratio in host_ratios.values():
         score -= 48**abs(ratio-host_ratio_average)
-
-    # TODO: the Laura option
 
     return score
 
@@ -187,21 +187,23 @@ def score_guest(schedule):
         for host, attendees in hosts.items():
             meals += len(attendees)
             for family in attendees:
+
+                # create a dictonary for each family
                 if family not in meets:
-                    meets[family] = set(attendees)
-                else:
-                    meets[family].update(attendees)
+                    meets[family] = {}
+                
+                # keep track of how many other families they meet (and how many times)
+                for match in attendees:
+                    meets[family][match] = 1 + meets[family].get(match, 0)
 
     # large score bonus for feeding everyone
     score += 128 * meals
 
     # small positive score for more meets
     for family in meets:
-        score += len(meets[family])
-        # small negitive score for familys that know each other meeting
-        for match in meets[family]:
-            if set(family.knows).intersection(match.knows):
-                score -= 1
+        for match, times in meets[family].items():
+            if not set(family.knows).intersection(match.knows):
+                score += 2-(1/times)
 
     return score
 
@@ -220,38 +222,64 @@ def generate_host_schedule(families):
         # get a list of allergies
         allergies_tonight = {}
         hosts_tonight = {}
+        priority_hosts_tonight = {}
         for family in families:
             if family.attend_nights[night]:
                 allergies_tonight[family.allergies] = allergies_tonight.get(family.allergies, 0) + family.size
-                if family.host_nights[night] and (None == family.host_limit or host_counts[family] < family.host_limit):
-                    hosts_tonight[family] = family.space - family.size
+                if family.host_nights[night] and (None == family.host_target or host_counts[family] < family.host_target):
+                    if None != family.host_target:
+                        priority_hosts_tonight[family] = family.space - family.size
+                    else:
+                        hosts_tonight[family] = family.space - family.size
 
         # can't suffle a dictionay so need a list list for hosts tonight
         host_list_tonight = list(hosts_tonight.keys())
         random.shuffle(host_list_tonight)
         
-        seats_before = sum(allergies_tonight.values())
-
         # find hosts for each allergy
         # TODO: sort allgesy by most restrictive first (allergies with the fewest hosts that can accomidate them)
         for allergy in sorted(allergies_tonight.keys(), key=lambda l: (len(l), l), reverse=True):
-            for host in host_list_tonight:
-                if (host in hosts_tonight) and (not allergy.intersection(host.allergens)):
-                    if host not in schedule[night]:
-                        allergies_tonight[host.allergies] -= host.size # Remove the host size from their allergy
-                        schedule[night][host] = {host} # add the host to the schedule
-                        host_counts[host] += 1
 
-                    # recaculate required space for allergy as well as space requried for allergy set
-                    host_space_remaining = hosts_tonight[host]
-                    hosts_tonight[host] -= allergies_tonight[allergy]
-                    allergies_tonight[allergy] -= host_space_remaining
+            # priority hosts require hosting a certain number of meals
+            if priority_hosts_tonight:
+                priority_host_list = list(priority_hosts_tonight.keys())
+                for host in priority_host_list:
+                    if (host in priority_hosts_tonight) and (not allergy.intersection(host.allergens)):
+                        if host not in schedule[night]:
+                            allergies_tonight[host.allergies] -= host.size # Remove the host size from their allergy
+                            schedule[night][host] = {host} # add the host to the schedule
+                            host_counts[host] += 1
 
-                    # remove host if they are full, skip to next allergy if allrgy is full
-                    if 0 >= hosts_tonight[host]:
-                        del hosts_tonight[host]
-                    if 0 >= allergies_tonight[allergy]:
-                        break
+                        # recaculate required space for allergy as well as space requried for allergy set
+                        host_space_remaining = priority_hosts_tonight[host]
+                        priority_hosts_tonight[host] -= allergies_tonight[allergy]
+                        allergies_tonight[allergy] -= host_space_remaining
+
+                        # remove host if they are full, skip to next allergy if allrgy is full
+                        if 0 >= priority_hosts_tonight[host]:
+                            del priority_hosts_tonight[host]
+                        if 0 >= allergies_tonight[allergy]:
+                            break
+            
+            # If more hosts are needed then look at the main list
+            if 0 < allergies_tonight[allergy]:
+                for host in host_list_tonight:
+                    if (host in hosts_tonight) and (not allergy.intersection(host.allergens)):
+                        if host not in schedule[night]:
+                            allergies_tonight[host.allergies] -= host.size # Remove the host size from their allergy
+                            schedule[night][host] = {host} # add the host to the schedule
+                            host_counts[host] += 1
+
+                        # recaculate required space for allergy as well as space requried for allergy set
+                        host_space_remaining = hosts_tonight[host]
+                        hosts_tonight[host] -= allergies_tonight[allergy]
+                        allergies_tonight[allergy] -= host_space_remaining
+
+                        # remove host if they are full, skip to next allergy if allrgy is full
+                        if 0 >= hosts_tonight[host]:
+                            del hosts_tonight[host]
+                        if 0 >= allergies_tonight[allergy]:
+                            break
             
     return schedule
 
@@ -438,10 +466,11 @@ def main():
             )
     parser.add_argument("input")
     parser.add_argument("output")
-    parser.add_argument("-t", "--time", default=120, type=int, help="The time to run in seconds")
-    parser.add_argument("-p", "--processes", type=int)
     parser.add_argument("-l", "--log", dest="logLevel", choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
                         help="Set the logging level", default='WARNING')
+    parser.add_argument("-p", "--processes", type=int)
+    parser.add_argument("-s", "--max-dinner-size", default=8, type=int, help="The maximum size of a single dinner including the host")
+    parser.add_argument("-t", "--time", default=120, type=int, help="The time to run in seconds")
     args = parser.parse_args()
 
     # setup logger
