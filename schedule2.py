@@ -62,7 +62,7 @@ class Family:
         return hash(self.email)
 
 # Reads a csv file in and populates a list of families
-def read_csv(filename):
+def read_csv(filename, max_dinner_size):
     families = []
     with open(filename, 'r') as file:
         #reader = csv.DictReader(csvfile)
@@ -73,6 +73,8 @@ def read_csv(filename):
             email = row[0]
             size = int(row[1])
             space = int(row[2])
+            if max_dinner_size < spzce:
+                space = max_dinner_size
             host_target = int(row[3]) if row[3] else None
 
             # allergies, allergens, knows, and repel are all space seperated lists
@@ -469,7 +471,7 @@ def main():
     parser.add_argument("-l", "--log", dest="logLevel", choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
                         help="Set the logging level", default='WARNING')
     parser.add_argument("-p", "--processes", type=int)
-    parser.add_argument("-s", "--max-dinner-size", default=8, type=int, help="The maximum size of a single dinner including the host")
+    parser.add_argument("-s", "--max_dinner_size", default=8, type=int, help="The maximum size of a single dinner including the host")
     parser.add_argument("-t", "--time", default=120, type=int, help="The time to run in seconds")
     args = parser.parse_args()
 
@@ -489,7 +491,7 @@ def main():
     if None != cpu_count and cpu_count < args.processes:
         log.warning('%d processes requested, system only reports %d cpus' % (args.processes, cpu_count))
 
-    families = read_csv(args.input)
+    families = read_csv(args.input, args.max_dinner_size)
 
     schedules = []
     processes = []
