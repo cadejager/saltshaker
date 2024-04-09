@@ -73,7 +73,7 @@ def read_csv(filename, max_dinner_size):
             email = row[0]
             size = int(row[1])
             space = int(row[2])
-            if max_dinner_size < spzce:
+            if max_dinner_size < space:
                 space = max_dinner_size
             host_target = int(row[3]) if row[3] else None
 
@@ -498,14 +498,19 @@ def main():
 
     schedule_q = multiprocessing.Queue()
 
-    for i in range(args.processes):
-        p = multiprocessing.Process(target=find_schedule_process, args=(args, families, schedule_q,))
-        processes.append(p)
-        p.start()
 
-    for p in processes:
+    if 1 < args.processes:
+        for i in range(args.processes):
+            p = multiprocessing.Process(target=find_schedule_process, args=(args, families, schedule_q,))
+            processes.append(p)
+            p.start()
+
+        for p in processes:
+            schedules.append(schedule_q.get())
+            p.join
+    else:
+        find_schedule_process(args, families, schedule_q)
         schedules.append(schedule_q.get())
-        p.join
 
     # find the best schedule from the threads
     schedule = schedules[0]
@@ -516,18 +521,19 @@ def main():
             schedule = new_schedule
             current_score = new_score
 
-
-    # TODO: Run a second pass to swap guests around for optimal matching
-    processes.clear()
-    for i in range(args.processes):
-        p = multiprocessing.Process(target=optimize_schedule_process, args=(args, families, schedule, schedule_q,))
-        processes.append(p)
-        p.start()
-
-    schedules.clear()
-    for p in processes:
+    if 1 < args.processes:
+        processes.clear()
+        for i in range(args.processes):
+            p = multiprocessing.Process(target=optimize_schedule_process, args=(args, families, schedule, schedule_q,))
+            processes.append(p)
+            p.start()
+        schedules.clear()
+        for p in processes:
+            schedules.append(schedule_q.get())
+            p.join
+    else:
+        optimize_schedule_process(args, families, schedule, schedule_q)
         schedules.append(schedule_q.get())
-        p.join
 
     # find the best schedule from the threads
     schedule = schedules[0]
