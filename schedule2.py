@@ -145,8 +145,10 @@ def summery(schedule):
     log.info(hcstring)
     log.info("meets_count: " + str(meets_count))
 
-# Calculates a score for the result
-def score_host(schedule):
+def host_summery(schedule):
+
+    log = multiprocessing.get_logger()
+
     score = 0
 
     # this will be a dictonary keyed by a family and with a value of the number of times they host
@@ -161,6 +163,44 @@ def score_host(schedule):
             if 0 < night and host in schedule[night-1]:
                 score -= 16
 
+    # the ratio of meals each host does
+    host_ratios = {}
+    for host in host_counts:
+        host_ratios[host] = host_counts[host]/host.nights_count
+
+    host_ratio_average = sum(host_ratios.values())/len(host_ratios)
+    host_ratio_max = max(host_ratios.values())
+
+    # penlized difference from ratiots
+    for ratio in host_ratios.values():
+        score -= 128**abs(ratio-host_ratio_average)
+
+    log.info("---Summary---")
+    log.info("average_ratio: " + str(host_ratio_average))
+    log.info("max_ratio: " + str(host_ratio_max))
+    hrstring = "Host Ratios: "
+    for host in host_ratios:
+        hrstring += str(host.email) + ": " + str(host_ratios[host]) + ", "
+    log.info(hrstring)
+
+# Calculates a score for the result
+def score_host(schedule):
+    score = 0
+
+    # this will be a dictonary keyed by a family and with a value of the number of times they host
+    host_counts = {}
+
+    for night in range(len(schedule)):
+        # medium penilty for the total number of dinners
+        score -= 2*len(schedule[night])
+        for host in schedule[night]:
+            # calculate ratios for hosts that don't ask to host an exact number of meals
+            if None == host.host_target:
+                host_counts[host] = host_counts.get(host, 0) + 1
+            # small penility for repeat dinners
+            if 0 < night and host in schedule[night-1]:
+                score -= 1
+
 
     # the ratio of meals each host does
     host_ratios = {}
@@ -169,9 +209,9 @@ def score_host(schedule):
 
     host_ratio_average = sum(host_ratios.values())/len(host_ratios)
 
-    # penlized difference from ratiots
+    # large penility for difference of ratios
     for ratio in host_ratios.values():
-        score -= 48**abs(ratio-host_ratio_average)
+        score -= 2**(52*abs(ratio-host_ratio_average))
 
     return score
 
@@ -187,7 +227,15 @@ def score_guest(schedule):
 
     for hosts in schedule:
         for host, attendees in hosts.items():
-            meals += len(attendees)
+            attend_count = len(attendees)
+
+            meals += attend_count
+            
+            # medium negitive score for dinners that have lots of free space
+            extra_seats = host.space - attend_count
+            if 1 < extra_seats:
+                score -= 2**(extra_seats)
+
             for family in attendees:
 
                 # create a dictonary for each family
@@ -235,6 +283,7 @@ def generate_host_schedule(families):
                         hosts_tonight[family] = family.space - family.size
 
         # can't suffle a dictionay so need a list list for hosts tonight
+        # TODO: sort host list by host ratio to generate better schedules automaically
         host_list_tonight = list(hosts_tonight.keys())
         random.shuffle(host_list_tonight)
         
@@ -314,7 +363,7 @@ def find_schedule(args, families):
             current_score = new_score
 
             # print out progress
-            summery(current_schedule)
+            host_summery(current_schedule)
             log.info("runs: " + str(k))
             log.info("score: " + str(current_score))
 
@@ -545,6 +594,7 @@ def main():
             current_score = new_score
     
     summery(schedule)
+    host_summery(schedule)
          
     log.warning("Total Possible Meals: " + str(count_meals(families)))
 
