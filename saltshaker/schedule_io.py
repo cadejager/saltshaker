@@ -27,10 +27,13 @@ def load_output_csv(input_csv, output_csv):
         reader = csv.reader(fh)
         next(reader, None)  # skip header
         for row in reader:
-            night = int(row[0])
-            space = int(row[2])
-            host_email = row[3]
-            attendee_emails = [e.strip() for e in row[4].split(",") if e.strip()]
+            try:
+                night = int(row[0])
+                space = int(row[2])
+                host_email = row[3]
+                attendee_emails = [e.strip() for e in row[4].split(",") if e.strip()]
+            except (IndexError, ValueError) as exc:
+                raise OutputCsvError("malformed row %r: %s" % (row, exc))
 
             if night < 0 or night >= nights:
                 raise OutputCsvError(
@@ -38,7 +41,6 @@ def load_output_csv(input_csv, output_csv):
             if host_email not in by_email:
                 raise OutputCsvError("unknown host email: %s" % host_email)
             host = by_email[host_email]
-            host.space = space  # trust the output CSV's recorded capacity
 
             if host in schedule[night]:
                 raise OutputCsvError(
@@ -55,6 +57,7 @@ def load_output_csv(input_csv, output_csv):
                     "host %s missing from own attendee list (night %d)"
                     % (host_email, night))
                 attendees.add(host)
+            host.space = space  # trust the output CSV's recorded capacity
             schedule[night][host] = attendees
 
     return families, schedule, warnings

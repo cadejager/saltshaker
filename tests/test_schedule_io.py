@@ -56,3 +56,12 @@ def test_host_missing_from_attendees_warns_and_is_added(tmp_path):
     [(host, attendees)] = schedule[0].items()
     assert host in attendees
     assert any("missing from own attendee" in w for w in warnings)
+
+
+def test_malformed_row_raises(tmp_path):
+    inp = _write(tmp_path, "in.csv", INPUT)
+    out = _write(tmp_path, "out.csv",
+                 "Night,Size,Space,Host,Attendees\n"
+                 'X,3,8,h@x,"h@x, g@x"\n')  # non-numeric Night
+    with pytest.raises(OutputCsvError):
+        load_output_csv(inp, out)

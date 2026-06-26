@@ -15,7 +15,7 @@ class Metrics:
     unfed_count: int
     unfed: list
     host_counts: dict
-    host_balance: dict  # or None
+    host_balance: dict | None
     new_meetings: int
     repeat_meetings: int
     total_empty_seats: int

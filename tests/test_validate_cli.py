@@ -38,6 +38,14 @@ def test_malformed_exits_two(tmp_path):
     assert main([inp, out]) == 2
 
 
+def test_malformed_row_exits_two(tmp_path):
+    inp = _write(tmp_path, "in.csv", INPUT)
+    out = _write(tmp_path, "out.csv",
+                 "Night,Size,Space,Host,Attendees\n"
+                 'X,3,8,h@x,"h@x, g@x"\n')
+    assert main([inp, out]) == 2
+
+
 def test_metrics_flag_prints_json(tmp_path, capsys):
     import json
     inp = _write(tmp_path, "in.csv", INPUT)
