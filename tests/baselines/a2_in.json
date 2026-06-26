@@ -1,0 +1,22 @@
+{
+  "dinners": {
+    "max": 60,
+    "min": 58
+  },
+  "meals": {
+    "floor": 175,
+    "max": 219,
+    "min": 219
+  },
+  "new_meetings": {
+    "max": 259,
+    "min": 235
+  },
+  "time": 0,
+  "trials": 5,
+  "unfed_count": {
+    "ceiling": 2,
+    "max": 0,
+    "min": 0
+  }
+}
