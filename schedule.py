@@ -168,20 +168,26 @@ def host_summery(schedule):
     for host in host_counts:
         host_ratios[host] = host_counts[host]/host.nights_count
 
-    host_ratio_average = sum(host_ratios.values())/len(host_ratios)
-    host_ratio_max = max(host_ratios.values())
-
-    # penlized difference from ratiots
-    for ratio in host_ratios.values():
-        score -= 128**abs(ratio-host_ratio_average)
-
     log.info("---Summary---")
-    log.info("average_ratio: " + str(host_ratio_average))
-    log.info("max_ratio: " + str(host_ratio_max))
-    hrstring = "Host Ratios: "
-    for host in host_ratios:
-        hrstring += str(host.email) + ": " + str(host_ratios[host]) + ", "
-    log.info(hrstring)
+
+    # only flexible hosts (no host_target) have a balance ratio; skip if there are none
+    # (otherwise the average/max below divide by zero)
+    if host_ratios:
+        host_ratio_average = sum(host_ratios.values())/len(host_ratios)
+        host_ratio_max = max(host_ratios.values())
+
+        # penlized difference from ratiots
+        for ratio in host_ratios.values():
+            score -= 128**abs(ratio-host_ratio_average)
+
+        log.info("average_ratio: " + str(host_ratio_average))
+        log.info("max_ratio: " + str(host_ratio_max))
+        hrstring = "Host Ratios: "
+        for host in host_ratios:
+            hrstring += str(host.email) + ": " + str(host_ratios[host]) + ", "
+        log.info(hrstring)
+    else:
+        log.info("no flexible hosts to balance (all hosts have a host_target)")
 
 # Calculates a score for the result
 def score_host(schedule):
@@ -207,11 +213,14 @@ def score_host(schedule):
     for host in host_counts:
         host_ratios[host] = host_counts[host]/host.nights_count
 
-    host_ratio_average = sum(host_ratios.values())/len(host_ratios)
+    # only flexible hosts (no host_target) have a balance ratio; if there are none there is
+    # nothing to balance, so the ratio penalty contributes zero (avoids a divide by zero)
+    if host_ratios:
+        host_ratio_average = sum(host_ratios.values())/len(host_ratios)
 
-    # large penility for difference of ratios
-    for ratio in host_ratios.values():
-        score -= 2**(52*abs(ratio-host_ratio_average))
+        # large penility for difference of ratios
+        for ratio in host_ratios.values():
+            score -= 2**(52*abs(ratio-host_ratio_average))
 
     return score
 
