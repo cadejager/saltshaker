@@ -57,6 +57,23 @@ Stage 1 is fully specified now (see `2026-06-26-stage-1-test-harness-design.md`)
 | D9 | clingo via the **in-process `clingo` Python package**, **but the solver stage also dumps the generated `.lp` program/facts to disk** as an audit artifact. | User chose the pip package over CLI-subprocess; dumping `.lp` recovers the audit trail the CLI approach would have given for free. |
 | D10 | Start clingo as **two ASP programs** (host stage, then guest stage), preserving small auditable hand-offs; keep a **single combined lexicographic model as a documented experiment**. | Matches the auditability value; single-model may yield better solutions and can be evaluated later with the Stage-1 metrics harness. |
 
+### Plan revision (2026-06-27)
+
+After Stage 1 shipped, we reconsidered the ordering. Because the Stage-1 harness already gives
+clingo a solver-independent safety net, there is little value in refactoring I/O around the
+soon-to-be-replaced random solver. **clingo moves up to be the next stage.**
+
+| # | Revised decision | Rationale |
+|---|------------------|-----------|
+| D14 | **Reorder: clingo is the next stage** (not the old Stage 2). The old Stage-2 work — **JSON instance/schedule interchange and the `schedule.py` module split — is deferred to Stage 4**, where the full Forms→schedule→PDF pipeline actually makes inter-stage files load-bearing. | The "stable contract" clingo needs is the test/metrics harness (done), not JSON files. Designing JSON contracts / splitting the random solver now is throwaway-risk. The "independently runnable stages" goal (D5) was really about the eventual full pipeline (Stage 4). |
+| D15 | The two **solver-independent wins fold into the clingo stage**: **input-CSV validation** (positional + strong validation, not named headers — the example headers vary too much) and the **JSON+Markdown run-report** (summary metrics + key lists; full schedule stays in the output CSV). | Both survive the rewrite and help compare clingo runs. D5's "named headers" is superseded: keep positional reading + a validation layer; the canonical contract is the (future) JSON instance, deferred to Stage 4. |
+| D16 | The clingo stage is **phased: (1) feasibility core → (2) objectives + hardening → (3) run-report + input validation**, each its own spec→plan→implement cycle. Phase 1 is specified in `2026-06-27-clingo-feasibility-design.md`. | De-risk the biggest unknown (can ASP model this and feed everyone?) in isolation before objective tuning. |
+| D17 | **Packaging:** add a **`pyproject.toml`** making `saltshaker` a package with `clingo==5.8.0` pinned and a `pytest` dev extra; run via **`uv run`** (no pip on the dev box; clingo 5.8.0 verified in-process via uv). | Pinned, reproducible, tool-agnostic dependency declaration. |
+
+**Note on D7:** the original "Stage 1 → I/O → clingo → automation" sequencing is **superseded by D14**.
+Stage references to "Stage 2 (I/O)" and "Stage 3 (clingo)" elsewhere in this document predate the
+revision; read them through D14–D16 (clingo next; I/O interchange + module split → Stage 4).
+
 ## 4. Key research findings (full detail in `2026-06-26-clingo-research.md`)
 
 - **R1 — Objective translation is lossy (the one real caveat).** clingo optimizes with
