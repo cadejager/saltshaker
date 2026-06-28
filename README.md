@@ -5,7 +5,7 @@ Dinners with all!
 
 The test harness uses `pytest`, run via [`uv`](https://docs.astral.sh/uv/) (no separate install step needed). From the repo root:
 
-    uv run --with pytest pytest
+    uv run pytest
 
 Audit any input/output CSV pair by hand (prints any hard-constraint violations; `--metrics` adds a JSON quality summary on stdout):
 

@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "saltshaker"
+version = "0.1.0"
+description = "Progressive dinner scheduler"
+requires-python = ">=3.9"
+dependencies = ["clingo==5.8.0"]
+
+[tool.setuptools]
+py-modules = ["schedule"]
+packages = ["saltshaker"]
+
+[dependency-groups]
+dev = ["pytest>=7"]
