@@ -70,6 +70,22 @@ soon-to-be-replaced random solver. **clingo moves up to be the next stage.**
 | D16 | The clingo stage is **phased: (1) feasibility core → (2) objectives + hardening → (3) run-report + input validation**, each its own spec→plan→implement cycle. Phase 1 is specified in `2026-06-27-clingo-feasibility-design.md`. | De-risk the biggest unknown (can ASP model this and feed everyone?) in isolation before objective tuning. |
 | D17 | **Packaging:** add a **`pyproject.toml`** making `saltshaker` a package with `clingo==5.8.0` pinned and a `pytest` dev extra; run via **`uv run`** (no pip on the dev box; clingo 5.8.0 verified in-process via uv). | Pinned, reproducible, tool-agnostic dependency declaration. |
 
+### Phase-2 decisions (2026-06-29)
+
+Phase 1 (feasibility) shipped and merged. Phase 2 (objectives) is specced in
+`2026-06-29-clingo-objectives-design.md` (phase 2a). Key decisions, several discovered by prototyping:
+
+| # | Decision | Rationale |
+|---|----------|-----------|
+| D18 | **Objective ladder: feed-everyone (hard) ≫ host-balance ≫ general-meets ≫ fuller-dinners ≫ no-back-to-back.** | Chris's priorities. Balance above mixing (reproducing the old solver's emphasis), but unlike the old solver clingo *also* feeds everyone. |
+| D19 | ~~Two-stage solve~~ **SUPERSEDED by D23.** (Originally: stage-1 balance → fix hosts → stage-2 mixing. A deeper 2026-07-03 investigation found the two-stage host-fixing actually *hurts* mixing, and that a one-stage model is both cleaner and better.) | — |
+| D23 | **ONE-STAGE solve** (one ASP program, one grounding, two optimization passes: prove balance → lock its cost → optimize mixing). Beats the flat model AND the two-stage design on mixing; proves balance optimal. | 2026-07-03 investigation. The blocker was never staging — it was balance-encoding *granularity* (D24). Locking the balance cost (not the hosts) keeps host choice open, giving better mixing (266–271) than fixing hosts (252). |
+| D24 | **Coarse** integer fair-share balance penalty (deviation in tenths, small weights) so clingo **proves** the optimum in ~0.3–2s. A finer ratio encoding finds marginally better M4 but is unprovable and re-stalls the solve. | 2026-07-03 investigation. Accept ~0.01–0.02 M4 for provability; balance is then deterministic. |
+| D25 | **Hard "wasted-seats" cap** (Chris's idea): per night, total empty seats ≤ (max host space − 1), as a HARD constraint, NOT a minimized objective. Prevents over-hosting; **replaces the empty-seats objective**; as a hard cap it does **not** bias against small hosts (verified). Also accelerates the balance proof, enabling one-stage. | 2026-07-03 interview + investigation. A per-seat objective would push toward big/full hosts and hurt ratio-balance, which matters more. |
+| D20 | **`knows` de-prioritized but "general meets" still optimized = metric M5.** `repels` unchanged (hard H2). | Chris doesn't care about `knows` but still wants distinct-meeting variety. Keeping `knows` facts lets the solver optimize exactly what the report measures; the field can be removed later with negligible effect. |
+| D21 | **Balance via `ratio-squared` fair-share with a *computed* anchor** (`T` = flexible host-slot demand from an auxiliary min-dinners solve). Default branch-and-bound, single-thread + seed (deterministic); long budgets acceptable but staging is near-instant. | The earlier 0.27 "ceiling" was a wrong fair-share anchor; computing it correctly reaches 0.10 proven-optimal. `usc` gives no model under hard `:- unfed`. |
+| D22 | **Phase 2 is split: 2a objectives (this spec) → 2b hardening** (infeasibility auto-relax + fail-loud, retire the random solver, parallel). Infeasibility handling: **auto-relax the global `-s` cap, then report; fail loud only on a true shortfall** (D4). | De-risk the iterative objective tuning in isolation; 2b is mechanical hardening. |
+
 **Note on D7:** the original "Stage 1 → I/O → clingo → automation" sequencing is **superseded by D14**.
 Stage references to "Stage 2 (I/O)" and "Stage 3 (clingo)" elsewhere in this document predate the
 revision; read them through D14–D16 (clingo next; I/O interchange + module split → Stage 4).
