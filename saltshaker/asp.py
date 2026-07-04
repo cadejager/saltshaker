@@ -52,6 +52,8 @@ def build_facts(families):
             lines.append("allergen(%s,%s)." % (e, _q(t)))
         for t in f.repel:
             lines.append("repel(%s,%s)." % (e, _q(t)))
+        for t in f.knows:
+            lines.append("knows(%s,%s)." % (e, _q(t)))
     return "\n".join(lines) + "\n"
 
 
@@ -81,3 +83,68 @@ def model_to_schedule(symbols, families):
             night = sym.arguments[2].number
             schedule[night].setdefault(host, set()).add(guest)
     return schedule
+
+
+# --- Phase 2a: one-stage objectives program parts ---
+# Hard constraints H1-H8, with feed-everyone HARD (a direct integrity constraint).
+HARD_CORE = """
+{ host(F,N) } :- canhost(F,N).
+seat(F,F,N) :- host(F,N).
+{ seat(G,H,N) : host(H,N) } 1 :- canattend(G,N), not host(G,N).
+
+:- host(H,N), space(H,Sp), #sum { S,G : seat(G,H,N), size(G,S) } > Sp.
+:- seat(G,H,N), G != H, allergy(G,T), allergen(H,T).
+:- seat(A,H,N), seat(B,H,N), A < B, repel(A,T), repel(B,T).
+:- htarget(F,T), #count { N : host(F,N) } > T.
+
+:- canattend(G,N), not host(G,N), not seat(G,_,N).
+"""
+
+# Hard wasted-seats cap: total empty seats per night <= Cap.
+CAP_RULE = """
+:- night(N), cap(Cap),
+   #sum { Sp,H : host(H,N), space(H,Sp) ; -S,G : seat(G,H,N), size(G,S) } > Cap.
+"""
+
+# Coarse host-balance (@3). pentab facts are emitted from Python.
+BALANCE_RULES = """
+flexible(F) :- canhost(F,_), not htarget(F,_).
+hostcnt(F,C) :- flexible(F), C = #count { N : host(F,N) }.
+balpen(F,P)  :- hostcnt(F,C), pentab(F,C,P).
+:~ balpen(F,P). [P@3, F]
+"""
+
+# Mixing (@2, = metric M5) and back-to-back (@1). Grounded for Pass 2 only.
+MIXING_B2B_RULES = """
+sharedknows(A,B) :- knows(A,T), knows(B,T), A < B.
+meet(A,B) :- seat(A,H,N), seat(B,H,N), A < B, not sharedknows(A,B).
+:~ meet(A,B). [-1@2, A, B]
+b2b(F,N) :- host(F,N), host(F,N-1).
+:~ b2b(F,N). [1@1, F, N]
+"""
+
+SHOW = """
+#show host/2.
+#show seat/3.
+"""
+
+# Balance-cost lock body for `#program lock(cb).` (grounded after Pass 1).
+LOCK_PROGRAM = ":- #sum { P,F : balpen(F,P) } > cb."
+
+
+def aux_program(families, cap):
+    """Min-dinners program (to anchor the fair-share target T): hard core + cap +
+    minimize total dinners. No balance/mixing."""
+    return (asp_join(build_facts(families), "cap(%d)." % cap, HARD_CORE, CAP_RULE,
+                     ":~ host(F,N). [1@1, F, N]", "#show host/2."))
+
+
+def base_program(families, cap, pentab):
+    """Pass-1 base: hard core + cap + coarse balance. Mixing/b2b are added later."""
+    return asp_join(build_facts(families), "cap(%d)." % cap, pentab,
+                    HARD_CORE, CAP_RULE, BALANCE_RULES, SHOW)
+
+
+def asp_join(*parts):
+    """Join non-empty program fragments with newlines."""
+    return "\n".join(p for p in parts if p) + "\n"
