@@ -75,3 +75,47 @@ def compute_target(families, cap, seed=0, time_limit=10):
         raise RuntimeError("aux min-dinners solve found no model")
     return sum(1 for s in symbols
                if s.name == "host" and s.arguments[0].string in flex_emails)
+
+
+def solve_optimized(families, seed=0, time_limit=60, aux_time_limit=10,
+                    balance_time_limit=30, lp_path=None):
+    """One-stage two-pass objectives solve. Returns the best schedule found.
+
+    Pass 1 proves the coarse host-balance optimum on the base program (facts + cap
+    + balance); then mixing/back-to-back rules and a balance-cost lock are grounded
+    in and Pass 2 maximizes mixing within the remaining budget. Balance is proven
+    (deterministic); mixing is best-found. See the objectives spec.
+    """
+    cap = balance.compute_cap(families)
+    target = compute_target(families, cap, seed=seed, time_limit=aux_time_limit)
+    pentab = balance.pentab_facts(families, target)
+    base_prog = asp.base_program(families, cap, pentab)
+
+    if lp_path is not None:
+        with open(lp_path, "w") as fh:
+            fh.write(base_prog + "\n" + asp.MIXING_B2B_RULES + "\n"
+                     + "#program lock(cb).\n" + asp.LOCK_PROGRAM + "\n")
+
+    ctl = clingo.Control(["--warn=none", "--seed=%d" % seed, "-t", "1"])
+    ctl.add("base", [], base_prog)
+    ctl.ground([("base", [])])
+
+    # Pass 1: prove the balance optimum (bounded so it can never hang).
+    symbols, cost, exhausted = _solve_bounded(ctl, balance_time_limit)
+    if symbols is None:
+        raise RuntimeError("no feasible schedule (hard feed-everyone unsatisfiable)")
+
+    # Ground Pass-2 objectives; lock balance at its proven optimum if we have it.
+    ctl.add("opt", [], asp.MIXING_B2B_RULES)
+    if exhausted and cost:
+        ctl.add("lock", ["cb"], asp.LOCK_PROGRAM)
+        ctl.ground([("opt", []), ("lock", [clingo.Number(cost[0])])])
+    else:
+        ctl.ground([("opt", [])])
+
+    # Pass 2: maximize mixing (>> b2b), best-found within the budget.
+    symbols2, _cost2, _exh2 = _solve_bounded(ctl, time_limit)
+    if symbols2 is not None:
+        symbols = symbols2
+
+    return asp.model_to_schedule(symbols, families)
