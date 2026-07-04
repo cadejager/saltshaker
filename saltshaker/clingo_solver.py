@@ -72,7 +72,9 @@ def compute_target(families, cap, seed=0, time_limit=10):
     ctl.ground([("base", [])])
     symbols, _cost, _exhausted = _solve_bounded(ctl, time_limit)
     if symbols is None:
-        raise RuntimeError("aux min-dinners solve found no model")
+        raise RuntimeError(
+            "aux min-dinners solve found no model within its budget "
+            "(input may be infeasible under the hard constraints and wasted-seats cap)")
     return sum(1 for s in symbols
                if s.name == "host" and s.arguments[0].string in flex_emails)
 
@@ -103,7 +105,13 @@ def solve_optimized(families, seed=0, time_limit=60, aux_time_limit=10,
     # Pass 1: prove the balance optimum (bounded so it can never hang).
     symbols, cost, exhausted = _solve_bounded(ctl, balance_time_limit)
     if symbols is None:
-        raise RuntimeError("no feasible schedule (hard feed-everyone unsatisfiable)")
+        if exhausted:
+            raise RuntimeError(
+                "no schedule exists: cannot feed everyone under the hard constraints "
+                "and the wasted-seats cap (cap may be too tight, or the input is infeasible)")
+        raise RuntimeError(
+            "no schedule found within the balance time budget "
+            "(raise balance_time_limit, or the input may be infeasible / the cap too tight)")
 
     # Ground Pass-2 objectives; lock balance at its proven optimum if we have it.
     ctl.add("opt", [], asp.MIXING_B2B_RULES)

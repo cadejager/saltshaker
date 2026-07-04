@@ -1,10 +1,11 @@
-"""CLI for the clingo feasibility solver:
+"""CLI for the clingo objectives solver:
 
-    uv run python -m saltshaker.cli <input.csv> <output.csv> [-s N] [--seed N] [--lp PATH]
+    uv run python -m saltshaker.cli <input.csv> <output.csv> [-s N] [--seed N] [--time-limit S] [--lp PATH]
 
-Reads the input CSV, solves the feasibility model with clingo, writes the output CSV,
-and dumps the ASP program to <output>.lp (or --lp PATH). Prints a one-line summary
-(and any unfed families) to stderr.
+Reads the input CSV, runs the one-stage two-pass objectives solve (proven-optimal
+host-balance, then best-found mixing within the --time-limit budget), writes the
+output CSV, dumps the ASP program to <output>.lp (or --lp PATH), and prints a
+one-line summary (meals/dinners/unfed/new_meetings/host-balance) to stderr.
 """
 import argparse
 import sys
