@@ -32,3 +32,22 @@ def test_pentab_facts_shape():
     assert 'pentab("a@x",0,20).' in facts   # |0-20|
     assert 'pentab("a@x",2,0).' in facts    # |20-20|
     assert 'pentab("a@x",1,10).' in facts    # |10-20|
+
+
+def test_synthetic_many_flexible_hosts_balance():
+    # 6 flexible hosts with VARIED availability + 6 guests over 4 nights.
+    from saltshaker.clingo_solver import solve_optimized
+    from saltshaker.constraints import validate
+    from saltshaker.metrics import measure
+    fams = []
+    for i in range(6):
+        att = [True] * (2 + i % 3)             # attend 2,3,4,2,3,4 nights
+        att += [False] * (4 - len(att))
+        fams.append(mkfam("h%d@x" % i, size=1, space=6, host=att, attend=att, nights=4))
+    for i in range(6):
+        fams.append(mkfam("g%d@x" % i, size=1, host=[False] * 4, attend=[True] * 4, nights=4))
+    sched = solve_optimized(fams, seed=0, time_limit=8)
+    assert validate(fams, sched) == []
+    assert measure(fams, sched).unfed_count == 0
+    hb = measure(fams, sched).host_balance
+    assert hb is not None and hb["max_deviation"] <= 0.35   # reasonably even given the setup
